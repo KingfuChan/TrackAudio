@@ -720,6 +720,7 @@ VersionCheckResponse CheckVersionSync()
 
     try {
         httplib::Client client(VERSION_CHECK_BASE_URL);
+        client.set_connection_timeout(5);
         auto res = client.Get(VERSION_CHECK_ENDPOINT);
         if (!res || res->status != httplib::StatusCode::OK_200) {
             std::string errorDetail;
