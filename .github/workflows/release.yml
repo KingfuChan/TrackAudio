@@ -7,7 +7,6 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     environment: Release
-
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-2022]
@@ -26,9 +25,9 @@ jobs:
       - name: Checkout submodules
         shell: bash
         run: |
-          git submodule update --init --remote backend/vcpkg
-          git submodule update --init --remote backend/extern/afv-native
-          git submodule update --init --remote backend/extern/libuiohook
+          git submodule update --init --recursive backend/vcpkg
+          git submodule update --init --recursive backend/extern/afv-native
+          git submodule update --init --recursive backend/extern/libuiohook
           cd backend/extern/afv-native
           git checkout develop-trackaudio
           cd ../libuiohook
@@ -42,20 +41,21 @@ jobs:
       - name: Install Python 3.x
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11.x'
+          python-version: "3.11.x"
 
-      - name: Update cmake
-        if: matrix.os != 'macos-latest'
-        run: |
-          pip install cmake
-          cmake --version
+      - name: Setup cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.30.x'
+
+      - name: Use cmake
+        run: cmake --version
 
       - name: Setup environment
         if: matrix.os == 'macos-latest'
         run: |
           brew update
-          brew upgrade cmake
-          cmake --version
+          brew install utf8proc
 
       - name: Installing codesign certificates
         if: matrix.os == 'macos-latest'
@@ -105,7 +105,6 @@ jobs:
           npm pack
           cd ..
           npm install ./backend/trackaudio-afv-1.0.0.tgz
-          npm install
 
       - name: Install dependencies and building backend (macOs arm64)
         if: matrix.arch == 'arm64' && matrix.os == 'macos-latest'
@@ -136,7 +135,7 @@ jobs:
       - name: Package app
         if: matrix.os == 'windows-2022'
         shell: bash
-        run: npm run build:win
+        run: npm run build:win -- --publish=never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -152,17 +151,17 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_API_KEY: './.a.p8'
+          APPLE_API_KEY: "./.a.p8"
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          npm run build:mac -- --${{ matrix.arch }}
+          npm run build:mac -- --${{ matrix.arch }} --publish=never
           rm ./.a.p8
 
       - name: Package app
         if: matrix.os == 'ubuntu-latest'
         shell: bash
-        run: npm run build:linux -- --${{ matrix.arch }}
+        run: npm run build:linux -- --${{ matrix.arch }} --publish=never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

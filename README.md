@@ -1,5 +1,4 @@
 <!-- markdownlint-disable MD033 MD045 MD007 -->
-<!-- no toc -->
 <h1>
   <img src="https://raw.githubusercontent.com/pierr3/TrackAudio/main/build/icon.png" width="50" valign="middle">
   <span style="font-size: 2em; font-weight: bold">TrackAudio</span>
@@ -24,12 +23,14 @@
 - 🎮 Comprehensive Stream Deck integration
 - 🪟 Compact mini-mode with transparency options
 - 🔌 Developer-friendly SDK with WebSocket and HTTP support
+- 🔄 Automatic Updates [Windows]
 
 ## Table of Contents
 
 - [FAQ](#faq)
   - [What's the difference between VectorAudio and TrackAudio?](#whats-the-difference-between-vectoraudio-and-trackaudio)
   - [Why does the audio sound different compared to the older AFV for Windows client?](#why-does-the-audio-sound-different-compared-to-the-older-afv-for-windows-client)
+  - [I'm having an issue auto-updating on Windows?](#im-having-an-issue-auto-updating-on-windows)
   - [My PTT does not work on macOS](#my-ptt-does-not-work-on-macos)
   - [I attempted to set a PTT, but it displays the name 'Unknown (XXX)'](#i-attempted-to-set-a-ptt-but-it-displays-the-name-unknown-xxx)
   - [I'm unable to set a PTT because it automatically assigns to my Joystick](#im-unable-to-set-a-ptt-because-it-automatically-assigns-to-my-joystick)
@@ -61,6 +62,10 @@ TrackAudio offers multiple types of radio hardware, Schmid ED-137B is set by def
 - Schmid ED-137B – Perceived as clearer audio with slight distortion, emphasising lower frequencies
 - Rockwell Collins 2100 – Typical radio-like distortion, commonly used in Boeing and Airbus aircraft (resembles the "Realistic ATC Audio Effect" in the older AFV for Windows client)
 - Garrex 220 – Similar to the Schmid ED-137B, but with slightly less distortion and a greater emphasis on higher frequencies.
+
+### I'm having an issue auto-updating on Windows?
+
+There may have been an issue in the update logic that is causing your instance of TrackAudio to not be able to update. Please [report it](https://github.com/pierr3/TrackAudio/issues/new) with a copy of your log file, and in the meantime you should update manually using the latest version from our [releases page](https://github.com/pierr3/TrackAudio/releases).
 
 ### My PTT does not work on macOS
 
@@ -102,7 +107,7 @@ Yes, using the menu on the right, however, this will only create one transceiver
 
 ### What is XC and XCA?
 
-When you right click XCA on a frequency that you are listening to, and if you are logged in as ATC, all the transceivers of that frequency will be cross-coupled. This means that all transmissions received by a transceiver in that list will also be re-emitted by all other transceivers. This allows for pilots in different parts of your airspace to hear eachother, since they may be using a different transceiver. 
+When you right click XCA on a frequency that you are listening to, and if you are logged in as ATC, all the transceivers of that frequency will be cross-coupled. This means that all transmissions received by a transceiver in that list will also be re-emitted by all other transceivers. This allows for pilots in different parts of your airspace to hear eachother, since they may be using a different transceiver.
 
 When you left click XCA, you activate "cross-couple across". This is the same as clicking "XC" in AFV for Windows, and allows you to cross-couple across frequencies, meaning you can join multiple sets of transceivers regardless of frequency.
 Pay attention, however, as you may cause overlap of radio by enabling this. For example, if you XCA one frequency that has a transceiver near the border of a neighboring vAcc with another that is at the other end of your sector, far away from that border with your neighboring vAcc, you will suddenly extend coverage of that second frequency to the border with your neighboor.
@@ -198,9 +203,9 @@ On Windows, Visual Studio is required (Community Edition is fine) with the `Desk
 If `cmake-js` isn't already installed run `npm install -g cmake-js`. For the first build run the following:
 
 ```sh
-git submodule update --init --remote backend/vcpkg
-git submodule update --init --remote backend/extern/afv-native
-git submodule update --init --remote backend/extern/libuiohook
+git submodule update --init --recursive backend/vcpkg
+git submodule update --init --recursive backend/extern/afv-native
+git submodule update --init --recursive backend/extern/libuiohook
 npm run build:backend
 npm install
 npm run dev
