@@ -13,8 +13,8 @@
 #define TIMER_CALLBACK_INTERVAL_SEC 15
 #define SLURPER_BASE_URL "https://slurper.vatsim.net"
 #define SLURPER_DATA_ENDPOINT "/users/info/"
-#define VERSION_CHECK_BASE_URL "https://cdn.jsdelivr.net"
-#define VERSION_CHECK_ENDPOINT "/gh/pierr3/TrackAudio@main/MANDATORY_VERSION"
+#define VERSION_CHECK_BASE_URL "https://uniapi.vatprc.net"
+#define VERSION_CHECK_ENDPOINT "/api/compat/trackaudio/mandatory_version"
 #define OBS_FREQUENCY 199998000 // 199.998
 #define UNICOM_FREQUENCY 122800000 // 122.800
 #define GUARD_FREQUENCY 121500000 // 121.500
