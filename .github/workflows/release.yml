@@ -8,6 +8,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     environment: Release
     strategy:
+      fail-fast: false # Ensure other builds continue even if one fails
       matrix:
         os: [ubuntu-latest, macos-latest, windows-2022]
         arch: [x64, arm64]
@@ -57,12 +58,7 @@ jobs:
           brew update
           brew install utf8proc
 
-      - name: Installing codesign certificates
-        if: matrix.os == 'macos-latest'
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERT_DATA }}
-          p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
+      # Certificate import step removed to avoid errors without valid Apple Developer Program
 
       - name: Install SFML native dependencies
         if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x64'
@@ -139,24 +135,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install notarization tools
-        if: matrix.os == 'macos-latest'
-        run: |
-          cat << EOF > ./.a.p8
-          ${{ secrets.APPLE_API_KEY }}
-          EOF
+      # Notarization setup removed to avoid errors (requires signing)
 
       - name: Package app
         if: matrix.os == 'macos-latest'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_API_KEY: "./.a.p8"
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false # Disable auto-search for keychain
+        # Override config to force null identity (unsigned build)
         run: |
-          npm run build:mac -- --${{ matrix.arch }} --publish=never
-          rm ./.a.p8
+          npm run build:mac -- --${{ matrix.arch }} --publish=never -c.mac.identity=null
 
       - name: Package app
         if: matrix.os == 'ubuntu-latest'
