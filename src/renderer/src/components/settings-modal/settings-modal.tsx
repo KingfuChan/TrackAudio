@@ -10,7 +10,7 @@ import AudioApis from './audio-apis';
 import AudioInput from './audio-input';
 import AudioOutputs from './audio-outputs';
 import { Info } from 'lucide-react';
-import { OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Nav, OverlayTrigger, Tab, Tooltip } from 'react-bootstrap';
 export interface SettingsModalProps {
   closeModal: () => void;
 }
@@ -31,6 +31,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ closeModal }) => {
   const [config, setConfig] = useState({} as Configuration);
   const [alwaysOnTop, setAlwaysOnTop] = useState<AlwaysOnTopMode>('never');
   const [transparentMiniMode, setLocalTransparentMiniMode] = useState(false);
+  const [pttReleaseSoundEnabled, setPttReleaseSoundEnabled] = useState(false);
+  const [loopbackEnabled, setLoopbackEnabled] = useState(false);
+  const [loopbackTarget, setLoopbackTarget] = useState(0);
+  const [loopbackGain, setLoopbackGain] = useState(50);
+  const [microphoneGain, setMicrophoneGain] = useState(100);
   const [cid, setCid] = useState('');
   const [password, setPassword] = useState('');
 
@@ -93,6 +98,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ closeModal }) => {
         setTransparentMiniMode(config.transparentMiniMode);
         setLocalTransparentMiniMode(config.transparentMiniMode);
         setRadioToMaxVolumeOnTX(config.radioToMaxVolumeOnTx);
+        setPttReleaseSoundEnabled(config.pttReleaseSoundEnabled);
+        setLoopbackEnabled(config.loopbackEnabled);
+        setLoopbackTarget(config.loopbackTarget);
+        setLoopbackGain(config.loopbackGain);
+        setMicrophoneGain(config.microphoneGain);
         setUpdateChannel(config.updateChannel);
       })
       .catch((err: unknown) => {
@@ -235,6 +245,46 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ closeModal }) => {
     setChangesSaved(SaveStatus.Saved);
   };
 
+  const handlePttReleaseSoundChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setChangesSaved(SaveStatus.Saving);
+    const enabled = e.target.value === 'true';
+    setPttReleaseSoundEnabled(enabled);
+    window.api.setPttReleaseSoundEnabled(enabled);
+    setChangesSaved(SaveStatus.Saved);
+  };
+
+  const handleLoopbackEnabledChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setChangesSaved(SaveStatus.Saving);
+    const enabled = e.target.value === 'true';
+    setLoopbackEnabled(enabled);
+    window.api.setLoopbackEnabled(enabled);
+    setChangesSaved(SaveStatus.Saved);
+  };
+
+  const handleLoopbackTargetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setChangesSaved(SaveStatus.Saving);
+    const target = parseInt(e.target.value);
+    setLoopbackTarget(target);
+    window.api.setLoopbackTarget(target);
+    setChangesSaved(SaveStatus.Saved);
+  };
+
+  const handleLoopbackGainChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setChangesSaved(SaveStatus.Saving);
+    const gain = parseInt(e.target.value);
+    setLoopbackGain(gain);
+    window.api.setLoopbackGain(gain);
+    setChangesSaved(SaveStatus.Saved);
+  };
+
+  const handleMicrophoneGainChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setChangesSaved(SaveStatus.Saving);
+    const gain = parseInt(e.target.value);
+    setMicrophoneGain(gain);
+    window.api.setMicrophoneGain(gain);
+    setChangesSaved(SaveStatus.Saved);
+  };
+
   const handleSetPtt = (pttIndex: number, shouldListenForJoysticks: boolean) => {
     if (pttIndex === 1) {
       updatePtt1KeySet(false);
@@ -364,260 +414,329 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ closeModal }) => {
             <div className="modal-header">
               <h5 className="modal-title">Settings</h5>
             </div>
-            <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-              <div className="col-6" style={{ float: 'left' }}>
-                <div className="form-group" style={{ width: '90%' }}>
-                  <h5>VATSIM Details</h5>
-                  <div className="col-lg">
-                    <label className="mt-2">CID</label>
-                    <input
-                      className="form-control mt-1"
-                      id="cidInput"
-                      placeholder="99999"
-                      value={cid}
-                      onChange={(e) => {
-                        // Issue #127: Strip non-digit characters instead of using type="number".
-                        const cleanCid = e.target.value.replace(/\D/g, ''); // Remove non-digit characters
-                        setCid(cleanCid);
-                        debouncedCid(cleanCid);
-                      }}
-                    ></input>
-                    <label className="mt-2">Password</label>
-                    <input
-                      type="password"
-                      className="form-control mt-1"
-                      id="passwordInput"
-                      placeholder="*******"
-                      defaultValue={password}
-                      onChange={(e) => debouncedPassword(e.target.value)}
-                    ></input>
+            <div className="modal-body" style={{ flex: 1, overflowY: 'auto' }}>
+              <Tab.Container defaultActiveKey="audio">
+                <Nav variant="tabs" className="mb-3">
+                  <Nav.Item>
+                    <Nav.Link eventKey="audio">Audio</Nav.Link>
+                  </Nav.Item>
+                  <Nav.Item>
+                    <Nav.Link eventKey="radio">Radio</Nav.Link>
+                  </Nav.Item>
+                  <Nav.Item>
+                    <Nav.Link eventKey="general">General</Nav.Link>
+                  </Nav.Item>
+                  <Nav.Item>
+                    <Nav.Link eventKey="account">Account</Nav.Link>
+                  </Nav.Item>
+                </Nav>
+                <Tab.Content>
+                  <Tab.Pane eventKey="audio">
+                    <div className="form-group">
+                      <label className="mt-1">Audio API</label>
+                      <AudioApis
+                        apis={audioApis}
+                        selectedApiId={config.audioApi}
+                        selectApi={(apiId: number) => {
+                          changeAudioApi(apiId);
+                        }}
+                      />
+                      <label className={`mt-2 ${!isHeadsetDeviceValid ? 'text-danger' : ''}`}>
+                        Headset device
+                        {!isHeadsetDeviceValid ? ' (*)' : ''}
+                      </label>
+                      <AudioOutputs
+                        devices={audioOutputDevices}
+                        selectedDeviceId={config.headsetOutputDeviceId}
+                        setDevice={(device): void => {
+                          setHeadsetDevice(device.id);
+                        }}
+                      />
+                      <label className={`mt-2 ${!isSpeakerDeviceValid ? 'text-danger' : ''}`}>
+                        Speaker device
+                        {!isSpeakerDeviceValid ? ' (*)' : ''}
+                      </label>
+                      <AudioOutputs
+                        devices={audioOutputDevices}
+                        selectedDeviceId={config.speakerOutputDeviceId}
+                        setDevice={(device): void => {
+                          setSpeakerDevice(device.id);
+                        }}
+                      />
+                      <label className={`mt-2 ${!isInputDeviceValid ? 'text-danger' : ''}`}>
+                        Input device
+                        {!isInputDeviceValid ? ' (*)' : ''}
+                      </label>
+                      <AudioInput
+                        devices={audioInputDevices}
+                        selectedDeviceId={config.audioInputDeviceId}
+                        setDevice={(device): void => {
+                          setInputDevice(device.id);
+                        }}
+                      />
 
-                    <label className="mt-2">Radio effects</label>
-                    <select
-                      id=""
-                      className="form-control mt-1"
-                      value={radioEffects}
-                      onChange={handleRadioEffectsChange}
-                    >
-                      <option value="on">On</option>
-                      <option value="input">Input only</option>
-                      <option value="output">Output only</option>
-                      <option value="off">Off</option>
-                    </select>
-                    <div className="d-flex justify-content-between align-items-center mt-2">
-                      <label>Radio hardware</label>
-                      <OverlayTrigger placement="right" overlay={renderRadioTooltip}>
-                        <button type="button" className="info-icon">
-                          <Info size={13} />
-                        </button>
-                      </OverlayTrigger>
+                      <button
+                        className={clsx(
+                          'btn mt-3 w-100',
+                          !isMicTesting && 'btn-info',
+                          isMicTesting && 'btn-warning'
+                        )}
+                        onClick={handleMicTest}
+                        disabled={
+                          !(hasPtt1BeenSetDuringSetup || hasPtt2BeenSetDuringSetup) ||
+                          config.headsetOutputDeviceId === '' ||
+                          config.speakerOutputDeviceId === '' ||
+                          config.audioInputDeviceId === ''
+                        }
+                      >
+                        {isMicTesting ? 'Stop mic test' : 'Start mic test'}
+                      </button>
+                      <div className="progress mt-2" style={{ height: '4px' }}>
+                        <div
+                          className="progress-bar bg-success no-amination"
+                          role="progressbar"
+                          style={{ width: vu.toString() + '%' }}
+                        ></div>
+                        <div
+                          className="progress-bar bg-danger no-amination"
+                          role="progressbar"
+                          style={{ width: (vuPeak - vu).toString() + '%' }}
+                        ></div>
+                      </div>
+
+                      <label className="mt-2">Microphone gain</label>
+                      <div className="d-flex align-items-center gap-2">
+                        <input
+                          type="range"
+                          className="form-range flex-grow-1"
+                          min="0"
+                          max="200"
+                          value={microphoneGain}
+                          onChange={handleMicrophoneGainChange}
+                        />
+                        <span style={{ minWidth: '40px', textAlign: 'right' }}>
+                          {microphoneGain}%
+                        </span>
+                      </div>
+
+                      <label className="mt-3">Microphone loopback (sidetone)</label>
+                      <select
+                        className="form-control mt-1"
+                        value={loopbackEnabled.toString()}
+                        onChange={handleLoopbackEnabledChange}
+                      >
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                      </select>
+                      {loopbackEnabled && (
+                        <>
+                          <label className="mt-2">Loopback output</label>
+                          <select
+                            className="form-control mt-1"
+                            value={loopbackTarget.toString()}
+                            onChange={handleLoopbackTargetChange}
+                          >
+                            <option value="0">Headset</option>
+                            <option value="1">Speakers</option>
+                          </select>
+                          <label className="mt-2">Loopback volume</label>
+                          <input
+                            type="range"
+                            className="form-range mt-1"
+                            min="0"
+                            max="100"
+                            value={loopbackGain}
+                            onChange={handleLoopbackGainChange}
+                          />
+                        </>
+                      )}
                     </div>
-                    <select
-                      id=""
-                      className="form-control mt-1"
-                      value={hardwareType}
-                      onChange={handleHardwareTypeChange}
-                    >
-                      <option value="0">Schmid ED-137B</option>
-                      <option value="1">Rockwell Collins 2100</option>
-                      <option value="2">Garex 220</option>
-                    </select>
-                  </div>
-                  <div className="col-lg">
-                    <label className="mt-2">Keep window on top</label>
-                    <select
-                      id=""
-                      className="form-control mt-1"
-                      onChange={handleAlwaysOnTop}
-                      value={alwaysOnTop}
-                    >
-                      <option value="always">Always</option>
-                      <option value="inMiniMode">In mini mode</option>
-                      <option value="never">Never</option>
-                    </select>
+                  </Tab.Pane>
 
-                    <label className="mt-2">Always show expanded RX</label>
-                    <select
-                      id=""
-                      className="form-control mt-1"
-                      onChange={handleShowExpandedRxChange}
-                      value={showExpandedRxInfo.toString()}
-                    >
-                      <option value="true">Always</option>
-                      <option value="false">Never</option>
-                    </select>
+                  <Tab.Pane eventKey="radio">
+                    <div className="form-group">
+                      <label className="mt-1">Radio effects</label>
+                      <select
+                        className="form-control mt-1"
+                        value={radioEffects}
+                        onChange={handleRadioEffectsChange}
+                      >
+                        <option value="on">On</option>
+                        <option value="input">Input only</option>
+                        <option value="output">Output only</option>
+                        <option value="off">Off</option>
+                      </select>
+                      <div className="d-flex justify-content-between align-items-center mt-2">
+                        <label>Radio hardware</label>
+                        <OverlayTrigger placement="right" overlay={renderRadioTooltip}>
+                          <button type="button" className="info-icon">
+                            <Info size={13} />
+                          </button>
+                        </OverlayTrigger>
+                      </div>
+                      <select
+                        className="form-control mt-1"
+                        value={hardwareType}
+                        onChange={handleHardwareTypeChange}
+                      >
+                        <option value="0">Schmid ED-137B</option>
+                        <option value="1">Rockwell Collins 2100</option>
+                        <option value="2">Garex 220</option>
+                      </select>
+                      <label className="mt-2">PTT release click sound</label>
+                      <select
+                        className="form-control mt-1"
+                        value={pttReleaseSoundEnabled.toString()}
+                        onChange={handlePttReleaseSoundChange}
+                      >
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                      </select>
 
-                    {isWindows && (
-                      <>
-                        <label className="mt-2">Release channel</label>
-                        <select
-                          id=""
-                          className="form-control mt-1"
-                          onChange={handleUpdateChannelChange}
-                          value={updateChannel}
-                        >
-                          <option value="stable">Stable</option>
-                          <option value="beta">Beta</option>
-                        </select>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="col-6" style={{ float: 'right' }}>
-                <div className="form-group">
-                  <h5>Audio configuration</h5>
-                  <label className="mt-2">Audio API</label>
-                  <AudioApis
-                    apis={audioApis}
-                    selectedApiId={config.audioApi}
-                    selectApi={(apiId: number) => {
-                      changeAudioApi(apiId);
-                    }}
-                  />
-                  <label className={`mt-2 ${!isHeadsetDeviceValid ? 'text-danger' : ''}`}>
-                    Headset device
-                    {!isHeadsetDeviceValid ? ' (*)' : ''}
-                  </label>
-                  <AudioOutputs
-                    devices={audioOutputDevices}
-                    selectedDeviceId={config.headsetOutputDeviceId}
-                    setDevice={(device): void => {
-                      setHeadsetDevice(device.id);
-                    }}
-                  />
-                  <label className={`mt-2 ${!isSpeakerDeviceValid ? 'text-danger' : ''}`}>
-                    Speaker device
-                    {!isSpeakerDeviceValid ? ' (*)' : ''}
-                  </label>
-                  <AudioOutputs
-                    devices={audioOutputDevices}
-                    selectedDeviceId={config.speakerOutputDeviceId}
-                    setDevice={(device): void => {
-                      setSpeakerDevice(device.id);
-                    }}
-                  />
-                  <label className={`mt-2 ${!isInputDeviceValid ? 'text-danger' : ''}`}>
-                    Input device
-                    {!isInputDeviceValid ? ' (*)' : ''}
-                  </label>
-                  <AudioInput
-                    devices={audioInputDevices}
-                    selectedDeviceId={config.audioInputDeviceId}
-                    setDevice={(device): void => {
-                      setInputDevice(device.id);
-                    }}
-                  />
-                  <label className="mt-2">Transparent mini mode</label>
-                  <select
-                    id=""
-                    className="form-control mt-1"
-                    onChange={handleTransparentMiniMode}
-                    value={transparentMiniMode.toString()}
-                  >
-                    <option value="true">Always</option>
-                    <option value="false">Never</option>
-                  </select>
-                  <label className="mt-2">Set radio to max volume on TX</label>
-                  <select
-                    id=""
-                    className="form-control mt-1"
-                    onChange={handleSetRadioToMaxVolumeOnTX}
-                    value={radioToMaxVolumeOnTX.toString()}
-                  >
-                    <option value="true">Always</option>
-                    <option value="false">Never</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div className="modal-body" style={{ paddingTop: '0' }}>
-              <div className="col-12">
-                <button
-                  className={clsx(
-                    'btn mt-3 w-100',
-                    !isMicTesting && 'btn-info',
-                    isMicTesting && 'btn-warning'
-                  )}
-                  onClick={handleMicTest}
-                  disabled={
-                    !(hasPtt1BeenSetDuringSetup || hasPtt2BeenSetDuringSetup) ||
-                    config.headsetOutputDeviceId === '' ||
-                    config.speakerOutputDeviceId === '' ||
-                    config.audioInputDeviceId === ''
-                  }
-                >
-                  {isMicTesting ? 'Stop mic test' : 'Start mic test'}
-                </button>
-                <div className="progress mt-2" style={{ height: '4px' }}>
-                  <div
-                    className="progress-bar bg-success no-amination"
-                    role="progressbar"
-                    style={{ width: vu.toString() + '%' }}
-                  ></div>
-                  <div
-                    className="progress-bar bg-danger no-amination"
-                    role="progressbar"
-                    style={{ width: (vuPeak - vu).toString() + '%' }}
-                  ></div>
-                </div>
-              </div>
-              <div className="col-6" style={{ float: 'left', paddingRight: '10px' }}>
-                <div className="form-group">
-                  <button
-                    className="btn text-box-container mt-3 w-100"
-                    onClick={() => {
-                      handleClearPtt(1);
-                    }}
-                  >
-                    {`Ptt 1: ${!hasPtt1BeenSetDuringSetup ? 'Press any key/button' : ptt1KeyName}`}
-                  </button>
-                  <button
-                    className={clsx(
-                      'btn mt-2 w-100',
-                      !pttIsOn && 'btn-info',
-                      pttIsOn && 'btn-warning'
-                    )}
-                    onClick={() => {
-                      handleSetPtt(1, true);
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      handleSetPtt(1, false);
-                    }}
-                  >
-                    Set new PTT 1
-                  </button>
-                </div>
-              </div>
-              <div className="col-6" style={{ float: 'right', paddingLeft: '10px' }}>
-                <div className="form-group">
-                  <button
-                    className="btn text-box-container mt-3 w-100"
-                    onClick={() => {
-                      handleClearPtt(2);
-                    }}
-                  >
-                    {`Ptt 2: ${!hasPtt2BeenSetDuringSetup ? 'Press any key/button' : ptt2KeyName}`}
-                  </button>
-                  <button
-                    className={clsx(
-                      'btn mt-2 w-100',
-                      !pttIsOn && 'btn-info',
-                      pttIsOn && 'btn-warning'
-                    )}
-                    onClick={() => {
-                      handleSetPtt(2, true);
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      handleSetPtt(2, false);
-                    }}
-                  >
-                    Set new PTT 2
-                  </button>
-                </div>
-              </div>
+                      <div className="row mt-3">
+                        <div className="col-6">
+                          <button
+                            className="btn text-box-container w-100"
+                            onClick={() => {
+                              handleClearPtt(1);
+                            }}
+                          >
+                            {`Ptt 1: ${!hasPtt1BeenSetDuringSetup ? 'Press any key/button' : ptt1KeyName}`}
+                          </button>
+                          <button
+                            className={clsx(
+                              'btn mt-2 w-100',
+                              !pttIsOn && 'btn-info',
+                              pttIsOn && 'btn-warning'
+                            )}
+                            onClick={() => {
+                              handleSetPtt(1, true);
+                            }}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              handleSetPtt(1, false);
+                            }}
+                          >
+                            Set new PTT 1
+                          </button>
+                        </div>
+                        <div className="col-6">
+                          <button
+                            className="btn text-box-container w-100"
+                            onClick={() => {
+                              handleClearPtt(2);
+                            }}
+                          >
+                            {`Ptt 2: ${!hasPtt2BeenSetDuringSetup ? 'Press any key/button' : ptt2KeyName}`}
+                          </button>
+                          <button
+                            className={clsx(
+                              'btn mt-2 w-100',
+                              !pttIsOn && 'btn-info',
+                              pttIsOn && 'btn-warning'
+                            )}
+                            onClick={() => {
+                              handleSetPtt(2, true);
+                            }}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              handleSetPtt(2, false);
+                            }}
+                          >
+                            Set new PTT 2
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </Tab.Pane>
+
+                  <Tab.Pane eventKey="general">
+                    <div className="form-group">
+                      <label className="mt-1">Keep window on top</label>
+                      <select
+                        className="form-control mt-1"
+                        onChange={handleAlwaysOnTop}
+                        value={alwaysOnTop}
+                      >
+                        <option value="always">Always</option>
+                        <option value="inMiniMode">In mini mode</option>
+                        <option value="never">Never</option>
+                      </select>
+
+                      <label className="mt-2">Always show expanded RX</label>
+                      <select
+                        className="form-control mt-1"
+                        onChange={handleShowExpandedRxChange}
+                        value={showExpandedRxInfo.toString()}
+                      >
+                        <option value="true">Always</option>
+                        <option value="false">Never</option>
+                      </select>
+
+                      <label className="mt-2">Transparent mini mode</label>
+                      <select
+                        className="form-control mt-1"
+                        onChange={handleTransparentMiniMode}
+                        value={transparentMiniMode.toString()}
+                      >
+                        <option value="true">Always</option>
+                        <option value="false">Never</option>
+                      </select>
+
+                      <label className="mt-2">Set radio to max volume on TX</label>
+                      <select
+                        className="form-control mt-1"
+                        onChange={handleSetRadioToMaxVolumeOnTX}
+                        value={radioToMaxVolumeOnTX.toString()}
+                      >
+                        <option value="true">Always</option>
+                        <option value="false">Never</option>
+                      </select>
+
+                      {isWindows && (
+                        <>
+                          <label className="mt-2">Release channel</label>
+                          <select
+                            className="form-control mt-1"
+                            onChange={handleUpdateChannelChange}
+                            value={updateChannel}
+                          >
+                            <option value="stable">Stable</option>
+                            <option value="beta">Beta</option>
+                          </select>
+                        </>
+                      )}
+                    </div>
+                  </Tab.Pane>
+
+                  <Tab.Pane eventKey="account">
+                    <div className="form-group">
+                      <label className="mt-1">CID</label>
+                      <input
+                        className="form-control mt-1"
+                        id="cidInput"
+                        placeholder="99999"
+                        value={cid}
+                        onChange={(e) => {
+                          // Issue #127: Strip non-digit characters instead of using type="number".
+                          const cleanCid = e.target.value.replace(/\D/g, '');
+                          setCid(cleanCid);
+                          debouncedCid(cleanCid);
+                        }}
+                      ></input>
+                      <label className="mt-2">Password</label>
+                      <input
+                        type="password"
+                        className="form-control mt-1"
+                        id="passwordInput"
+                        placeholder="*******"
+                        defaultValue={password}
+                        onChange={(e) => debouncedPassword(e.target.value)}
+                      ></input>
+                    </div>
+                  </Tab.Pane>
+                </Tab.Content>
+              </Tab.Container>
             </div>
 
             <div className="modal-footer">

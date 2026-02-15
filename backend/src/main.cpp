@@ -41,6 +41,9 @@ public:
     inline static std::atomic_bool runVuMeterCallback = false;
 
     inline static std::unique_ptr<InputHandler> inputHandler = nullptr;
+
+    inline static std::string resourcePath;
+    inline static std::atomic_bool pttReleaseSoundEnabled = false;
 };
 namespace {
 Napi::Array GetAudioApis(const Napi::CallbackInfo& info)
@@ -117,9 +120,12 @@ Napi::Boolean Connect(const Napi::CallbackInfo& info)
 
     auto password = info[0].As<Napi::String>().Utf8Value();
 
-    mClient->SetCallsign(UserSession::callsign);
-    mClient->SetCredentials(UserSession::cid, password);
-    mClient->SetClientPosition(UserSession::lat, UserSession::lon, 150, 150);
+    {
+        std::lock_guard<std::mutex> sessionLock(UserSession::mtx);
+        mClient->SetCallsign(UserSession::callsign);
+        mClient->SetCredentials(UserSession::cid, password);
+        mClient->SetClientPosition(UserSession::lat, UserSession::lon, 150, 150);
+    }
     return Napi::Boolean::New(env, mClient->Connect());
 }
 
@@ -311,6 +317,7 @@ Napi::Boolean IsFrequencyActive(const Napi::CallbackInfo& info)
 void SetCid(const Napi::CallbackInfo& info)
 {
     auto cid = info[0].As<Napi::String>().Utf8Value();
+    std::lock_guard<std::mutex> sessionLock(UserSession::mtx);
     UserSession::cid = cid;
 }
 
@@ -363,9 +370,12 @@ void SetPtt(const Napi::CallbackInfo& info)
         return;
     }
 
-    if (!UserSession::xy) {
-        mClient->SetPtt(false);
-        return;
+    {
+        std::lock_guard<std::mutex> sessionLock(UserSession::mtx);
+        if (!UserSession::xy) {
+            mClient->SetPtt(false);
+            return;
+        }
     }
 
     bool state = info[0].As<Napi::Boolean>().Value();
@@ -376,11 +386,60 @@ void SetPtt(const Napi::CallbackInfo& info)
 void SetMainRadioVolume(const Napi::CallbackInfo& info)
 {
     float volume = info[0].As<Napi::Number>().FloatValue();
-    UserSession::currentMainVolume = volume;
+
+    {
+        std::lock_guard<std::mutex> sessionLock(UserSession::mtx);
+        UserSession::currentMainVolume = volume;
+    }
 
     RadioHelper::setAllRadioVolumes();
 
     MainThreadShared::mApiServer->publishMainVolumeChange(volume, false);
+}
+
+void SetMicrophoneVolume(const Napi::CallbackInfo& info)
+{
+    if (!mClient) {
+        return;
+    }
+    float volume = info[0].As<Napi::Number>().FloatValue();
+    mClient->SetMicrophoneVolume(volume);
+}
+
+void SetPttReleaseSoundEnabled(const Napi::CallbackInfo& info)
+{
+    MainThreadShared::pttReleaseSoundEnabled = info[0].As<Napi::Boolean>().Value();
+}
+
+void PlayAdHocSound(const Napi::CallbackInfo& info)
+{
+    if (!mClient || !mClient->IsAudioRunning()) {
+        return;
+    }
+    std::string wavFilePath = info[0].As<Napi::String>().Utf8Value();
+    float gain = info[1].As<Napi::Number>().FloatValue();
+    int target = info[2].As<Napi::Number>().Int32Value();
+    mClient->PlayAdHocSound(wavFilePath, gain, static_cast<afv_native::AdHocOutputTarget>(target));
+}
+
+void StopAdHocSounds(const Napi::CallbackInfo& /*info*/)
+{
+    if (!mClient) {
+        return;
+    }
+    mClient->StopAdHocSounds();
+}
+
+void SetLoopback(const Napi::CallbackInfo& info)
+{
+    if (!mClient) {
+        return;
+    }
+    bool enabled = info[0].As<Napi::Boolean>().Value();
+    int target = info[1].As<Napi::Number>().Int32Value();
+    float gain = info[2].As<Napi::Number>().FloatValue();
+    int hardware = info[3].As<Napi::Number>().Int32Value();
+    mClient->SetLoopback(enabled, static_cast<afv_native::AdHocOutputTarget>(target), gain, static_cast<afv_native::HardwareType>(hardware));
 }
 
 Napi::Promise SetFrequencyRadioVolume(const Napi::CallbackInfo& info)
@@ -660,6 +719,16 @@ void HandleAfvEvents()
         NapiHelpers::callElectron("PttState", "0");
         MainThreadShared::mApiServer->handleAFVEventForWebsocket(
             sdk::types::Event::kTxEnd, std::nullopt, std::nullopt);
+
+        // Play the PTT release sound on a detached thread to avoid blocking the
+        // event callback with file I/O — PlayAdHocSound calls LoadWav() which
+        // reads the WAV file from disk.
+        if (MainThreadShared::pttReleaseSoundEnabled && mClient && mClient->IsAudioRunning()) {
+            std::thread([] {
+                auto wavPath = std::filesystem::path(MainThreadShared::resourcePath) / "Click_f32.wav";
+                mClient->PlayAdHocSound(wavPath.string(), 1.0f, afv_native::AdHocOutputTarget::Headset);
+            }).detach();
+        }
     });
 
     event.AddHandler<afv_native::AudioErrorEvent>([&](const afv_native::AudioErrorEvent& event) {
@@ -721,7 +790,8 @@ VersionCheckResponse CheckVersionSync()
 
     try {
         httplib::Client client(VERSION_CHECK_BASE_URL);
-        client.set_connection_timeout(5);
+        client.set_connection_timeout(10);
+        client.set_read_timeout(10);
         auto res = client.Get(VERSION_CHECK_ENDPOINT);
         if (!res || res->status != httplib::StatusCode::OK_200) {
             std::string errorDetail;
@@ -788,6 +858,7 @@ Napi::Object Bootstrap(const Napi::CallbackInfo& info)
         throw Napi::Error::New(info.Env(), "Resource path is required");
     }
     std::string resourcePath = info[0].As<Napi::String>().Utf8Value();
+    MainThreadShared::resourcePath = resourcePath;
     if (info.Length() > 1 && info[1].IsString()) {
         std::string request = info[1].As<Napi::String>().Utf8Value();
         mClient = std::make_unique<afv_native::api::atcClient>(CLIENT_NAME, resourcePath, request);
@@ -796,13 +867,17 @@ Napi::Object Bootstrap(const Napi::CallbackInfo& info)
     }
 
     try {
-      MainThreadShared::mRemoteDataHandler = std::make_unique<RemoteData>();
-      PLOGI << "Remote data handler created successfully";
-      MainThreadShared::mApiServer = std::make_shared<SDK>();
-      PLOGI << "SDK server created successfully";
+        MainThreadShared::mRemoteDataHandler = std::make_unique<RemoteData>();
+        PLOGI << "Remote data handler created successfully";
+        MainThreadShared::mApiServer = std::make_shared<SDK>();
+        PLOGI << "SDK server created successfully";
     } catch (const std::exception& e) {
+        MainThreadShared::mRemoteDataHandler.reset();
+        MainThreadShared::mApiServer.reset();
+        mClient.reset();
         outObject["canRun"] = Napi::Boolean::New(info.Env(), false);
-        PLOGE << "Error creating remote data handler: " << e.what();
+        PLOGE << "Error creating remote data handler or SDK: " << e.what();
+        return outObject;
     }
 
     // Setup afv
@@ -812,8 +887,13 @@ Napi::Object Bootstrap(const Napi::CallbackInfo& info)
     try {
         MainThreadShared::inputHandler = std::make_unique<InputHandler>();
     } catch (const std::exception& e) {
+        MainThreadShared::inputHandler.reset();
+        MainThreadShared::mApiServer.reset();
+        MainThreadShared::mRemoteDataHandler.reset();
+        mClient.reset();
         outObject["canRun"] = Napi::Boolean::New(info.Env(), false);
         PLOGE << "Error creating input handler: " << e.what();
+        return outObject;
     }
 
     UserSettings::load();
@@ -836,6 +916,7 @@ void SetSession(const Napi::CallbackInfo& info)
     auto lon = object.Get("linstal").As<Napi::Number>().DoubleValue();
     auto isAtc = object.Get("ianto").As<Napi::Boolean>().Value();
 
+    std::lock_guard<std::mutex> sessionLock(UserSession::mtx);
     UserSession::isDebug = true;
     UserSession::xy = isAtc;
 
@@ -850,23 +931,31 @@ Napi::Boolean Exit(const Napi::CallbackInfo& info)
 {
     PLOGI << "Awaiting to exit TrackAudio...";
 
-    MainThreadShared::mApiServer.reset();
-    MainThreadShared::mRemoteDataHandler.reset();
-    MainThreadShared::inputHandler.reset();
+    // 1. Signal exit first so callbacks stop being queued
+    NapiHelpers::_requestExit.store(true);
+
+    // 2. Stop VU meter thread properly (signal + join)
+    MainThreadShared::runVuMeterCallback = false;
+    if (MainThreadShared::vuMeterThread && MainThreadShared::vuMeterThread->joinable()) {
+        MainThreadShared::vuMeterThread->join();
+    }
     MainThreadShared::vuMeterThread.reset();
 
-    NapiHelpers::_requestExit.store(true);
-    if (mClient->IsVoiceConnected()) {
+    // 3. Stop subsystems in reverse creation order (they access mClient in their threads)
+    MainThreadShared::inputHandler.reset();
+    MainThreadShared::mRemoteDataHandler.reset();
+    MainThreadShared::mApiServer.reset();
+
+    // 4. Now safe to disconnect and destroy mClient
+    if (mClient && mClient->IsVoiceConnected()) {
         PLOGI << "Connection to network detected, forcing disconnect...";
         mClient->Disconnect();
     }
 
-    if (mClient->IsAudioRunning()) {
+    if (mClient && mClient->IsAudioRunning()) {
         PLOGI << "Audio running, stopping...";
         mClient->StopAudio();
     }
-
-
 
     mClient.reset();
     PLOGI << "Exiting TrackAudio...";
@@ -934,6 +1023,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
         Napi::String::New(env, "SetMainRadioVolume"), Napi::Function::New(env, SetMainRadioVolume));
 
     exports.Set(
+        Napi::String::New(env, "SetMicrophoneVolume"), Napi::Function::New(env, SetMicrophoneVolume));
+
+    exports.Set(
         Napi::String::New(env, "SetRadioEffects"), Napi::Function::New(env, SetRadioEffects));
 
     exports.Set(
@@ -965,6 +1057,17 @@ Napi::Object Init(Napi::Env env, Napi::Object exports)
 
     exports.Set(
         Napi::String::New(env, "GetLoggerFilePath"), Napi::Function::New(env, GetLoggerFilePath));
+
+    exports.Set(
+        Napi::String::New(env, "PlayAdHocSound"), Napi::Function::New(env, PlayAdHocSound));
+
+    exports.Set(
+        Napi::String::New(env, "StopAdHocSounds"), Napi::Function::New(env, StopAdHocSounds));
+
+    exports.Set(
+        Napi::String::New(env, "SetPttReleaseSoundEnabled"), Napi::Function::New(env, SetPttReleaseSoundEnabled));
+
+    exports.Set(Napi::String::New(env, "SetLoopback"), Napi::Function::New(env, SetLoopback));
 
     exports.Set(Napi::String::New(env, "Exit"), Napi::Function::New(env, Exit));
 

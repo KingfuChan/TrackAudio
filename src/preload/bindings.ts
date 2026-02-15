@@ -41,6 +41,21 @@ export const api = {
   setRadioToMaxVolumeOnTX: (state: boolean) => {
     ipcRenderer.send('set-radio-to-max-volume-on-tx', state);
   },
+  setPttReleaseSoundEnabled: (enabled: boolean) => {
+    ipcRenderer.send('set-ptt-release-sound-enabled', enabled);
+  },
+  setLoopbackEnabled: (enabled: boolean) => {
+    ipcRenderer.send('set-loopback-enabled', enabled);
+  },
+  setLoopbackTarget: (target: number) => {
+    ipcRenderer.send('set-loopback-target', target);
+  },
+  setLoopbackGain: (gain: number) => {
+    ipcRenderer.send('set-loopback-gain', gain);
+  },
+  setMicrophoneGain: (gain: number) => {
+    ipcRenderer.send('set-microphone-gain', gain);
+  },
   getAudioApis: () => ipcRenderer.invoke('audio-get-apis'),
   getAudioInputDevices: (apiId: number) => ipcRenderer.invoke('audio-get-input-devices', apiId),
   getAudioOutputDevices: (apiId: number) => ipcRenderer.invoke('audio-get-output-devices', apiId),
@@ -64,15 +79,8 @@ export const api = {
 
   addFrequency: (frequency: number, callsign: string, outputVolume?: number) =>
     ipcRenderer.invoke('audio-add-frequency', frequency, callsign, outputVolume),
-  removeFrequency: (
-    frequency: number,
-    callsign?: string
-  ) =>
-    ipcRenderer.invoke(
-      'audio-remove-frequency',
-      frequency,
-      callsign
-    ),
+  removeFrequency: (frequency: number, callsign?: string) =>
+    ipcRenderer.invoke('audio-remove-frequency', frequency, callsign),
   IsFrequencyActive: (frequency: number) =>
     ipcRenderer.invoke('audio-is-frequency-active', frequency),
   setFrequencyState: (
@@ -121,6 +129,10 @@ export const api = {
 
   StartMicTest: () => ipcRenderer.invoke('start-mic-test'),
   StopMicTest: () => ipcRenderer.invoke('stop-mic-test'),
+
+  PlayAdHocSound: (wavFileName: string, gain: number, target: number) =>
+    ipcRenderer.invoke('play-ad-hoc-sound', wavFileName, gain, target),
+  StopAdHocSounds: () => ipcRenderer.invoke('stop-ad-hoc-sounds'),
 
   UpdatePlatform: () => ipcRenderer.invoke('update-platform'),
 

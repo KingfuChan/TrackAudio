@@ -97,6 +97,7 @@ declare namespace TrackAudioAfv {
   export function SetCid(cid: string): void;
 
   export function SetMainRadioVolume(volume: number): void;
+  export function SetMicrophoneVolume(volume: number): void;
   export function SetFrequencyRadioVolume(frequency: number, stationVolume: number): void;
   export function SetPtt(activate: boolean): void;
 
@@ -108,6 +109,11 @@ declare namespace TrackAudioAfv {
 
   export function StartMicTest(): void;
   export function StopMicTest(): void;
+
+  export function PlayAdHocSound(wavFilePath: string, gain: number, target: number): void;
+  export function StopAdHocSounds(): void;
+  export function SetPttReleaseSoundEnabled(enabled: boolean): void;
+  export function SetLoopback(enabled: boolean, target: number, gain: number, hardware: number): void;
 
   export function RegisterCallback(
     func: (arg: string, arg2: string, arg3: string, arg4: string) => void

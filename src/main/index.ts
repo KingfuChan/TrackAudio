@@ -75,6 +75,11 @@ const isInMiniMode = () => {
   return mainWindow.getContentSize()[0] <= miniModeWidthBreakpoint;
 };
 
+const applyLoopbackSettings = () => {
+  const { loopbackEnabled, loopbackTarget, loopbackGain, hardwareType } = configManager.config;
+  TrackAudioAfv.SetLoopback(loopbackEnabled, loopbackTarget, loopbackGain / 100, hardwareType);
+};
+
 const setAudioSettings = () => {
   TrackAudioAfv.SetAudioSettings(
     configManager.config.audioApi,
@@ -84,6 +89,8 @@ const setAudioSettings = () => {
   );
   TrackAudioAfv.SetRadioEffects(configManager.config.radioEffects);
   TrackAudioAfv.SetHardwareType(configManager.config.hardwareType);
+  TrackAudioAfv.SetMicrophoneVolume(configManager.config.microphoneGain / 100);
+  applyLoopbackSettings();
 };
 
 /**
@@ -410,6 +417,8 @@ app
       }
     }
 
+    TrackAudioAfv.SetPttReleaseSoundEnabled(configManager.config.pttReleaseSoundEnabled);
+
     createWindow();
   })
   .catch((e: unknown) => {
@@ -418,10 +427,13 @@ app
   });
 
 app.on('before-quit', () => {
-  // Perform cleanup
   if (TrackAudioAfv.IsConnected()) {
     TrackAudioAfv.Disconnect();
   }
+  // Stop mic test after disconnect to ensure the VU meter thread is joined
+  // before Exit() destroys the client. StopMicTest calls StopAudio(),
+  // so it must run after Disconnect which needs audio still active.
+  TrackAudioAfv.StopMicTest();
   TrackAudioAfv.Exit();
 });
 
@@ -479,6 +491,40 @@ ipcMain.on('set-transparent-mini-mode', (_, transparentMiniMode: boolean) => {
 
 ipcMain.on('set-radio-to-max-volume-on-tx', (_, radioToMaxVolumeOnTx: boolean) => {
   configManager.updateConfig({ radioToMaxVolumeOnTx });
+});
+
+ipcMain.on('set-ptt-release-sound-enabled', (_, pttReleaseSoundEnabled: boolean) => {
+  configManager.updateConfig({ pttReleaseSoundEnabled });
+  TrackAudioAfv.SetPttReleaseSoundEnabled(pttReleaseSoundEnabled);
+});
+
+ipcMain.on('set-loopback-enabled', (_, loopbackEnabled: boolean) => {
+  configManager.updateConfig({ loopbackEnabled });
+  applyLoopbackSettings();
+});
+
+ipcMain.on('set-loopback-target', (_, loopbackTarget: number) => {
+  configManager.updateConfig({ loopbackTarget });
+  applyLoopbackSettings();
+});
+
+ipcMain.on('set-loopback-gain', (_, loopbackGain: number) => {
+  configManager.updateConfig({ loopbackGain });
+  applyLoopbackSettings();
+});
+
+ipcMain.on('set-microphone-gain', (_, microphoneGain: number) => {
+  configManager.updateConfig({ microphoneGain });
+  TrackAudioAfv.SetMicrophoneVolume(microphoneGain / 100);
+});
+
+ipcMain.handle('play-ad-hoc-sound', (_, wavFileName: string, gain: number, target: number) => {
+  const wavPath = join(process.resourcesPath, wavFileName);
+  TrackAudioAfv.PlayAdHocSound(wavPath, gain, target);
+});
+
+ipcMain.handle('stop-ad-hoc-sounds', () => {
+  TrackAudioAfv.StopAdHocSounds();
 });
 
 ipcMain.handle('audio-get-apis', () => {
@@ -647,6 +693,7 @@ ipcMain.handle('set-radio-effects', (_, radioEffects: RadioEffects) => {
 ipcMain.handle('set-hardware-type', (_, hardwareType: number) => {
   configManager.updateConfig({ hardwareType });
   TrackAudioAfv.SetHardwareType(hardwareType);
+  applyLoopbackSettings();
 });
 
 ipcMain.handle('start-mic-test', () => {
@@ -849,6 +896,8 @@ const handleEvent = (arg: string, arg2: string, arg3: string, arg4: string) => {
 
   if (arg == AfvEventTypes.Error) {
     mainWindow?.webContents.send('error', arg2);
+    const wavPath = join(process.resourcesPath, 'md80_error.wav');
+    TrackAudioAfv.PlayAdHocSound(wavPath, 1.0, 2);
   }
 
   if (arg == AfvEventTypes.VoiceConnected) {
