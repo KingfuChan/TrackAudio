@@ -26,7 +26,8 @@
         },
         "curl",
         "nlohmann-json",
-        "openssl"
+        "openssl",
+        "libevent"
     ],
     "overrides": [
         { "name": "cpp-httplib", "version": "0.21.0" },
