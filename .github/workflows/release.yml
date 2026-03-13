@@ -147,9 +147,8 @@ jobs:
       - name: Install notarization tools
         if: matrix.os == 'macos-latest'
         run: |
-          cat << EOF > ./.a.p8
-          ${{ secrets.APPLE_API_KEY }}
-          EOF
+          echo "Skipping notarization - no Apple API key configured"
+          touch ./.a.p8
 
       - name: Package app
         if: matrix.os == 'macos-latest' && matrix.arch == 'x64'
