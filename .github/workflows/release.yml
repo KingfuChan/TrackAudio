@@ -62,13 +62,6 @@ jobs:
           brew update
           brew install utf8proc
 
-      - name: Installing codesign certificates
-        if: matrix.os == 'macos-latest'
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERT_DATA }}
-          p12-password: ${{ secrets.APPLE_CERT_PASSWORD }}
-
       - name: Install SFML native dependencies
         if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x64'
         run: |
